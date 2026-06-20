@@ -3,18 +3,39 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/x509"
 	"fmt"
+	"math/big"
 	"os"
+	"time"
 )
 
-func SelfSign() {
-	// create private key
+func SelfSign() ([]byte, error) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	publicKey := &privateKey.PublicKey
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: private key generation failed %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("error: private key generation failed %w\n", err)
 	}
-	fmt.Println(privateKey)
+	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
+	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
+	if err != nil {
+		return nil, fmt.Errorf("error: random number generation failed %w\n", err)
+	}
+	// generate cert
+	template := x509.Certificate{
+		SerialNumber:          serialNumber,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		NotBefore:             time.Now(),
+		NotAfter:              time.Now().AddDate(10, 0, 0),
+		IsCA:                  true,
+		BasicConstraintsValid: true,
+	} // key usage, not before not after, constraintsValid, isCA
+	certificate, err := x509.CreateCertificate(rand.Reader, &template, &template, publicKey, privateKey)
+	if err != nil {
+		return nil, fmt.Errorf("error: certificate generation failed %w\n", err)
+	}
+	fmt.Println(certificate)
+	return certificate, nil
 }
 
 func main() {
